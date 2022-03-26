@@ -13,20 +13,28 @@ class Game:
         self.setting = Setting()
         self.screen = pygame.display. \
             set_mode(self.setting.screen_size)
+
         # Ball setting
         self.ball = Ball(randint(0, self.setting.screen_size[0]),
                          randint(0, self.setting.screen_size[1]), self.screen, self.setting)
 
+        # Initialize these variables to make sure operations are only perform once when mouse is clicked.
         self.mouse_only_left_clicked_once = True
         self.mouse_only_right_clicked_once = True
-        self.mouse_position = []
+
+        # When mouse is clicked, positions of the mouse should be recorded and stored.
+        self.mouse_positions = []
 
         self.clock = pygame.time.Clock()
         self.index = 0
 
-        self.obstacle = Obstacle(self.screen)
-        self.obstacle_list = []
         self.obstacle_position_list = []
+        self.obstacle_list = []
+
+        # initializing mouse position in a tuple.
+        self.mouse_position = ()
+        self.right_mouse_click_position = ()
+        self.collided_rect_index = 0
 
     def run_game(self):
         """This function is responsible to
@@ -35,79 +43,84 @@ class Game:
         # FramePerSec = pygame.time.Clock()
 
         while True:
-            self.index += 1
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+            self.index += 1
 
             # Fill in screen background color.
             self.screen.fill(self.setting.
                              back_ground_color)
 
-            # by checking on mouse_only_clicked_once == 1,
-            # we can assure that when the mouse is pressed, it only perform the task once.
-            # if we don't define mouse_only_clicked_once == 1,
-            # tasks might be performed multiple times when mouse is pressed.
-            if self.mouse_only_left_clicked_once == 1 and self.mouse_left_clicked() == True:
-                self.mouse_position = [int(pygame.mouse.get_pos()[0]), int(pygame.mouse.get_pos()[1])]
+            # check for event from the keyboard and the mouse.
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                # listen mouse events.
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    # Things should happen when left clicked.
+                    if event.button == 1:
+                        self.mouse_position = pygame.mouse.get_pos()
+                        # No particular condition should be met before draw the first obstacle.
+                        if len(self.obstacle_position_list) == 0:
+                            self.record_and_appending_obstacle()
+                        else:
+                            # Need to check is one obstacle is colliding with another before appending it.
+                            if self.did_collide_with_any_rect(self.mouse_position):
+                                # if one collides with one another in the list, pop the last one in the list.
+                                self.record_and_appending_obstacle()
+                                self.obstacle_position_list.pop(len(self.obstacle_position_list) - 1)
+                                self.obstacle_list.pop(len(self.obstacle_list) - 1)
+                            # # if one does not collide with others, then it's safe to append it.
+                            else:
+                                self.record_and_appending_obstacle()
+                    # Things should happen when right clicked.
+                    elif event.button == 3:
+                        self.right_mouse_click_position = pygame.mouse.get_pos()
 
-                # # check when the user draws a new obstacle, it's not colliding with any existing ones.
-                # if self.did_obstacle_collide_with_one_another((self.mouse_position[0], self.mouse_position[1])):
-                self.obstacle_position_list.append(self.mouse_position)
+                        # This event should do nothing if the length of the obstacle list is empty
+                        if len(self.obstacle_list) != 0:
+                            # check if the point collides with any of the rect in the list.
+                            if self.did_collide_with_any_rect(self.right_mouse_click_position):
+                                self.obstacle_list.pop(self.collided_rect_index)
+                                self.obstacle_position_list.pop(self.collided_rect_index)
 
-                self.obstacle_list.append(self.obstacle)
-                self.mouse_only_left_clicked_once = 0
-
-                print(len(self.obstacle_list), ' ', len(self.obstacle_position_list))
-
-                self.obstacle_list.append(self.obstacle)
-                self.mouse_only_left_clicked_once = 0
-
-                # if len(self.obstacle_list) >= 1:
-                #     for item in self.obstacle_list:
-                #         if not item.did_obstacle_collide_with_one_another((self.mouse_position[0],
-                #                                                            self.mouse_position[1])):
-                #
-                #
-            elif self.mouse_only_right_clicked_once == 1 and self.mouse_right_clicked() == True:
-                self.mouse_only_right_clicked_once = 0
-
-            # Reset it to 1 every time when index variable is divisible by 150.
-            if self.index % 50 == 0:
-                self.mouse_only_left_clicked_once = True
-                self.mouse_only_right_clicked_once = True
-
-            # draw obstacle from the obstacle position list.
-            if self.obstacle_position_list:
-
+            # Obstacle.
+            # Draw obstacles.
+            if len(self.obstacle_position_list) != 0:
                 for index in range(0, len(self.obstacle_position_list)):
                     self.obstacle_list[index].draw_obstacle(self.obstacle_position_list[index][0],
                                                             self.obstacle_position_list[index][1])
 
-                    # Check if the ball is colliding with any object.
-                    if self.ball.ball_did_collide(self.obstacle_list[index].obs_rect):
-                        break
-
-            # FramePerSec.tick(self.setting.time_delays)
-
-            self.ball.set_ball_position()
+            # Ball.
+            self.ball.draw_ball()
             self.ball.move_ball()
 
-            # self.clock.tick(self.setting.time_delays)
+            if len(self.obstacle_list) != 0:
+                self.ball.ball_did_collide(self.obstacle_list)
+
             pygame.display.update()
 
-    def mouse_left_clicked(self):
-        """
-        Detecting if the user pressed the left button on the mouse.
-        :return: boolean - if mouse is left pressed.
-        """
-        return pygame.mouse.get_pressed()[0]
+            # self.clock.tick(self.setting.time_delays)
 
-    def mouse_right_clicked(self):
-        """
-        Detecting if the user pressed the right button on the mouse.
-        :return: boolean - if mouse is right pressed.
-        """
-        return pygame.mouse.get_pressed()[2]
+    def did_collide_with_any_rect(self, point):
+        """Checks if a point collides with any rect."""
+        obstacle_collision = []
+        for rect in self.obstacle_list:
+            if rect.is_point_in_a_rect(point):
+                self.collided_rect_index = self.obstacle_list.index(rect)
+                obstacle_collision.append(True)
+            else:
+                obstacle_collision.append(False)
+        # If all the variable in the list are not True, then it means the last obstacle appended did not collide
+        # with previous appended obstacles.
+        if not any(obstacle_collision):
+            return False
+        else:
+            return True
+
+    def record_and_appending_obstacle(self):
+        """Append new obstacle and its position into lists."""
+        # Store the mouse position in a list, mouse.get_pos() returns a tuple.
+        self.obstacle_position_list.append(self.mouse_position)
+        # Create an obstacle and it should be stored in a list
+        self.obstacle_list.append(Obstacle(self.screen))
