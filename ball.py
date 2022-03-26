@@ -23,7 +23,7 @@ class Ball:
 
         self.change_ball_dir_once = 1
 
-        self.moving_distance = 0.3
+        self.moving_distance = 1
 
     def set_ball_position(self):
         """Set the ball position."""
